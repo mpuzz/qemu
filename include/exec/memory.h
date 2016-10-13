@@ -41,6 +41,8 @@
 #define MEMORY_REGION(obj) \
         OBJECT_CHECK(MemoryRegion, (obj), TYPE_MEMORY_REGION)
 
+#include "qemu/thread.h"
+
 typedef struct MemoryRegionOps MemoryRegionOps;
 typedef struct MemoryRegionMmio MemoryRegionMmio;
 
@@ -224,6 +226,11 @@ struct MemoryRegion {
     MemoryRegionIoeventfd *ioeventfds;
     QLIST_HEAD(, IOMMUNotifier) iommu_notify;
     IOMMUNotifierFlag iommu_notify_flags;
+
+    //Avatar-specific
+    const MemoryRegionOps *real_ops;
+    QemuAvatarSemaphore semaphore;
+    void *real_opaque;
 };
 
 /**
