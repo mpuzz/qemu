@@ -115,3 +115,4 @@ tags
 TAGS
 docker-src.*
 *~
+/hw/arm/avatar-executable/wait_for_interrupt
