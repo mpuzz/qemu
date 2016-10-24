@@ -55,7 +55,7 @@ static QDict * load_configuration(const char * filename)
 
     close(file);
 
-    obj = qobject_from_json(filename);
+    obj = qobject_from_json(filedata);
     if (!obj || qobject_type(obj) != QTYPE_QDICT)
     {
         fprintf(stderr, "Error parsing JSON configuration file\n");
@@ -128,6 +128,7 @@ static const MemoryRegionOps thared_safe_ops = {
 };
 
 static void copy_ram_content(RAMBlock *src, RAMBlock *dst, uint64_t size);
+static void load_program(QDict *conf, ARMCPU *cpu);
 
 static void make_device_sharable(SysBusDevice *sb, const char *file_path, const char *sem_name)
 {
@@ -158,10 +159,12 @@ static void make_device_sharable(SysBusDevice *sb, const char *file_path, const 
 static void copy_ram_content(RAMBlock *src, RAMBlock *dst, uint64_t size)
 {
     uint64_t i;
+    if(!src) return;
     char *casted_dst = (char *) dst->host;
     char *casted_src = (char *) src->host;
     for(i = 0; i < size; ++i)
     {
+        fflush(stdout);
         casted_dst[i] = casted_src[i];
     }
 }
@@ -216,6 +219,8 @@ static void board_init(MachineState * ms)
         fprintf(stderr, "Unable to find CPU definition\n");
         exit(1);
     }
+
+    load_program(conf, cpuu);
 
     /*
      * The devices stuff is just considered a hack, I want to replace everything here with a device tree parser as soon as I have the time ...
@@ -276,6 +281,9 @@ static void board_init(MachineState * ms)
         }
     }
 
+}
+
+/*
     g_assert((qdict_haskey(conf, "entry_address") || qdict_haskey(conf, "init_state")));
     if (qdict_haskey(conf, "entry_address")) {
 	    g_assert(qobject_type(qdict_get(conf, "entry_address")) == QTYPE_QINT);
@@ -284,8 +292,29 @@ static void board_init(MachineState * ms)
         ((CPUARMState *) cpu)->thumb = (entry_address & 1) != 0 ? 1 : 0;
         ((CPUARMState *) cpu)->regs[15] = entry_address & (~1);
     }
+*/
 
-    printf("Configurable: Ready to start at 0x%lx.\n", (unsigned long) entry_address);
+static struct arm_boot_info boot_info;
+
+static void load_program(QDict *conf, ARMCPU *cpu)
+{
+    const char *program;
+    MemoryRegion *sysmem = get_system_memory();
+    MemoryRegion *ram = g_new(MemoryRegion, 1);
+
+    g_assert(qdict_haskey(conf, "kernel"));
+    program = qdict_get_str(conf, "kernel");
+
+    memory_region_allocate_system_memory(ram, NULL, "versatile.ram", 1024*1024);
+    memory_region_add_subregion(sysmem, 0, ram);
+
+    boot_info.ram_size = 1024 * 1024;
+    boot_info.kernel_filename = program;
+    boot_info.kernel_cmdline = "";
+    boot_info.initrd_filename = "";
+    boot_info.board_id = 1;
+    arm_load_kernel(cpu, &boot_info);
+
 }
 
 static void configurable_machine_class_init(ObjectClass *oc, void *data)
