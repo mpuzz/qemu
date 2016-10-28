@@ -230,6 +230,7 @@ struct MemoryRegion {
     //Avatar-specific
     const MemoryRegionOps *real_ops;
     QemuAvatarSemaphore semaphore;
+    QemuAvatarMessageQueue mq;
     void *real_opaque;
 };
 

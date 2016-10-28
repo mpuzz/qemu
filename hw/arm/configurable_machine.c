@@ -23,6 +23,8 @@
 #include "target-arm/cpu.h"
 #include "qemu/thread.h"
 #include "exec/ram_addr.h"
+#include "avatar/irq.h"
+
 /* Board init.  */
 
 static QDict * load_configuration(const char * filename)
@@ -67,8 +69,21 @@ static QDict * load_configuration(const char * filename)
     return qobject_to_qdict(obj);
 }
 
-static void dummy_interrupt(void * opaque, int irq, int level)
+static void dispatch_interrupt(void *opaque, int irq, int level)
 {
+    if(opaque == NULL)
+        return;
+
+    SysBusDevice *sb = SYS_BUS_DEVICE(opaque);
+    MemoryRegion *mr;
+    IRQ_MSG msg = {
+        .irq_num = irq,
+        .level = level
+    };
+
+    mr = sysbus_mmio_get_region(sb, 0);
+    //TODO: IPC
+    qemu_avatar_mq_send(&(mr->mq), &msg, sizeof(msg));
 }
 
 // HACK HACK HACK cut'paste from helper.c
@@ -127,46 +142,23 @@ static const MemoryRegionOps thared_safe_ops = {
     .endianness = DEVICE_NATIVE_ENDIAN,
 };
 
-static void copy_ram_content(RAMBlock *src, RAMBlock *dst, uint64_t size);
 static void load_program(QDict *conf, ARMCPU *cpu);
 
-static void make_device_sharable(SysBusDevice *sb, const char *file_path, const char *sem_name)
+static void make_device_shareble(SysBusDevice *sb, qemu_irq *irq, const char *file_path, const char *sem_name)
 {
     MemoryRegion *mr;
-    RAMBlock *ptr;
-    uint64_t size;
 
     //Get the memory region associated
     mr = sysbus_mmio_get_region(sb, 0);
-    ptr = mr->ram_block;
-    size = memory_region_size(mr);
 
-    //Mem-map the file and copy the content of the old chunk to it
-    mr->ram_block = qemu_ram_alloc_from_file(memory_region_size(mr), mr, 1, file_path, NULL);
-    copy_ram_content(ptr, mr->ram_block, size);
-
-    //TODO: wrap the IO operations for thread-safeness
+    //wrap the IO operations for thread-safeness
     mr->real_ops = mr->ops;
     mr->real_opaque = mr->opaque;
     mr->opaque = mr;
     mr->ops = &thared_safe_ops;
     qemu_avatar_sem_open(&(mr->semaphore), sem_name);
-
-    //free the old chunk
-    qemu_ram_free(ptr);
-}
-
-static void copy_ram_content(RAMBlock *src, RAMBlock *dst, uint64_t size)
-{
-    uint64_t i;
-    if(!src) return;
-    char *casted_dst = (char *) dst->host;
-    char *casted_src = (char *) src->host;
-    for(i = 0; i < size; ++i)
-    {
-        fflush(stdout);
-        casted_dst[i] = casted_src[i];
-    }
+    qemu_avatar_mq_open_write(&(mr->mq), sem_name);
+    qemu_irq_set_opaque(*irq, sb);
 }
 
 static void board_init(MachineState * ms)
@@ -259,7 +251,7 @@ static void board_init(MachineState * ms)
             {
                 SysBusDevice *sb;
                 //For now only dummy interrupts ...
-                irq = qemu_allocate_irqs(dummy_interrupt, NULL, 1);
+                irq = qemu_allocate_irqs(dispatch_interrupt, NULL, 1);
                 sb = SYS_BUS_DEVICE(sysbus_create_simple(qemu_name, address, *irq));
                 if(qdict_haskey(device, "file_name") &&
                    qdict_haskey(device, "semaphore_name"))
@@ -268,9 +260,10 @@ static void board_init(MachineState * ms)
                     g_assert(qobject_type(qdict_get(device, "semaphore_name")) == QTYPE_QSTRING);
                     const char *file_name = qdict_get_str(device, "file_name");
                     const char *semaphore_name = qdict_get_str(device, "semaphore_name");
+
                     g_assert(sb->num_mmio == 1);
 
-                    make_device_sharable(sb, file_name, semaphore_name);
+                    make_device_shareble(sb, irq, file_name, semaphore_name);
                 }
             }
             else
@@ -300,14 +293,20 @@ static void load_program(QDict *conf, ARMCPU *cpu)
     const char *program;
     MemoryRegion *sysmem = get_system_memory();
     MemoryRegion *ram = g_new(MemoryRegion, 1);
+    size_t ram_size = 1024 * 1024;
 
     g_assert(qdict_haskey(conf, "kernel"));
     program = qdict_get_str(conf, "kernel");
 
-    memory_region_allocate_system_memory(ram, NULL, "versatile.ram", 1024*1024);
+    if(qdict_haskey(conf, "ram_size"))
+    {
+        ram_size = qdict_get_int(conf, "ram_size");
+    }
+
+    memory_region_allocate_system_memory(ram, NULL, "configurable.ram", ram_size);
     memory_region_add_subregion(sysmem, 0, ram);
 
-    boot_info.ram_size = 1024 * 1024;
+    boot_info.ram_size = ram_size;
     boot_info.kernel_filename = program;
     boot_info.kernel_cmdline = "";
     boot_info.initrd_filename = "";
