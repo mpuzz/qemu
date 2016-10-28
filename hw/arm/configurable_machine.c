@@ -179,7 +179,6 @@ static void board_init(MachineState * ms)
     ARMCPU *cpuu;
     CPUState *cpu;
     QDict * conf = NULL;
-    uint64_t entry_address=0;
 
     //Load configuration file
     if (kernel_filename)
