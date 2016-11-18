@@ -10,6 +10,7 @@
 #include "qemu/osdep.h"
 #include "qapi/error.h"
 #include "hw/hw.h"
+#include "sysemu/sysemu.h"
 #include "hw/arm/arm.h"
 #include "exec/address-spaces.h"
 #include "hw/sysbus.h"
@@ -24,6 +25,9 @@
 #include "qemu/thread.h"
 #include "exec/ram_addr.h"
 #include "avatar/irq.h"
+
+#define QDICT_ASSERT_KEY_TYPE(_dict, _key, _type) \
+    g_assert(qdict_haskey(_dict, _key) && qobject_type(qdict_get(_dict, _key)) == _type)
 
 /* Board init.  */
 
@@ -86,29 +90,6 @@ static void dispatch_interrupt(void *opaque, int irq, int level)
     qemu_avatar_mq_send(&(mr->mq), &msg, sizeof(msg));
 }
 
-// HACK HACK HACK cut'paste from helper.c
-/* Map CPU modes onto saved register banks.  */
-static inline int bank_number(ARMCPU *cpu, int mode)
-{
-    switch (mode) {
-    case ARM_CPU_MODE_USR:
-    case ARM_CPU_MODE_SYS:
-        return 0;
-    case ARM_CPU_MODE_SVC:
-        return 1;
-    case ARM_CPU_MODE_ABT:
-        return 2;
-    case ARM_CPU_MODE_UND:
-        return 3;
-    case ARM_CPU_MODE_IRQ:
-        return 4;
-    case ARM_CPU_MODE_FIQ:
-        return 5;
-    }
-    cpu_abort(CPU(cpu), "Bad mode %x\n", mode);
-    return -1;
-}
-
 static uint64_t thread_safe_read(void *opaque, hwaddr addr, unsigned size)
 {
     MemoryRegion *mr = (MemoryRegion *) opaque;
@@ -144,7 +125,7 @@ static const MemoryRegionOps thared_safe_ops = {
 
 static void load_program(QDict *conf, ARMCPU *cpu);
 
-static void make_device_shareble(SysBusDevice *sb, qemu_irq *irq, const char *file_path, const char *sem_name)
+static void make_device_shareble(SysBusDevice *sb, const char *mq_path, const char *sem_name)
 {
     MemoryRegion *mr;
 
@@ -157,8 +138,60 @@ static void make_device_shareble(SysBusDevice *sb, qemu_irq *irq, const char *fi
     mr->opaque = mr;
     mr->ops = &thared_safe_ops;
     qemu_avatar_sem_open(&(mr->semaphore), sem_name);
-    qemu_avatar_mq_open_write(&(mr->mq), sem_name);
-    qemu_irq_set_opaque(*irq, sb);
+    qemu_avatar_mq_open_write(&(mr->mq), mq_path);
+}
+
+static void set_properties(DeviceState *dev, QList *properties)
+{
+    QListEntry *entry;
+    QLIST_FOREACH_ENTRY(properties, entry)
+    {
+        QDict *property;
+        const char *name;
+        const char *type;
+
+        g_assert(qobject_type(entry->value) == QTYPE_QDICT);
+
+        property = qobject_to_qdict(entry->value);
+        QDICT_ASSERT_KEY_TYPE(property, "type", QTYPE_QSTRING);
+        QDICT_ASSERT_KEY_TYPE(property, "name", QTYPE_QSTRING);
+
+        name = qdict_get_str(property, "name");
+        type = qdict_get_str(property, "type");
+
+        if(!strcmp(type, "serial"))
+        {
+            QDICT_ASSERT_KEY_TYPE(property, "value", QTYPE_QINT);
+            const int value = qdict_get_int(property, "value");
+            qdev_prop_set_chr(dev, name, serial_hds[value]);
+        }
+        else if(!strcmp(type, "string"))
+        {
+            QDICT_ASSERT_KEY_TYPE(property, "value", QTYPE_QSTRING);
+            const char *value = qdict_get_str(property, "value");
+            qdev_prop_set_string(dev, name, value);
+        }
+    }
+}
+
+static SysBusDevice *make_configurable_device(const char *qemu_name, uint64_t address, QList *properties)
+{
+    DeviceState *dev;
+    SysBusDevice *s;
+    qemu_irq irq;
+
+    dev = qdev_create(NULL, qemu_name);
+
+    if(properties) set_properties(dev, properties);
+
+    qdev_init_nofail(dev);
+
+    s = SYS_BUS_DEVICE(dev);
+    sysbus_mmio_map(s, 0, address);
+    irq = qemu_allocate_irq(dispatch_interrupt, dev, 1);
+    sysbus_connect_irq(s, 0, irq);
+
+    return s;
 }
 
 static void board_init(MachineState * ms)
@@ -229,19 +262,13 @@ static void board_init(MachineState * ms)
             const char * qemu_name;
             const char * bus;
             uint64_t address;
-            qemu_irq* irq;
 
             g_assert(qobject_type(entry->value) == QTYPE_QDICT);
             device = qobject_to_qdict(entry->value);
 
-            g_assert(qdict_haskey(device, "address") &&
-                qobject_type(qdict_get(device, "address")) == QTYPE_QINT);
-
-            g_assert(qdict_haskey(device, "qemu_name") &&
-                qobject_type(qdict_get(device, "qemu_name")) == QTYPE_QSTRING);
-
-            g_assert(qdict_haskey(device, "bus") &&
-                qobject_type(qdict_get(device, "bus")) == QTYPE_QSTRING);
+            QDICT_ASSERT_KEY_TYPE(device, "address", QTYPE_QINT);
+            QDICT_ASSERT_KEY_TYPE(device, "qemu_name", QTYPE_QSTRING);
+            QDICT_ASSERT_KEY_TYPE(device, "bus", QTYPE_QSTRING);
 
             bus = qdict_get_str(device, "bus");
             qemu_name = qdict_get_str(device, "qemu_name");
@@ -250,20 +277,28 @@ static void board_init(MachineState * ms)
             if (strcmp(bus, "sysbus") == 0)
             {
                 SysBusDevice *sb;
-                //For now only dummy interrupts ...
-                irq = qemu_allocate_irqs(dispatch_interrupt, NULL, 1);
-                sb = SYS_BUS_DEVICE(sysbus_create_simple(qemu_name, address, *irq));
-                if(qdict_haskey(device, "file_name") &&
+                QList *properties = NULL;
+
+                if(qdict_haskey(device, "properties") &&
+                   qobject_type(qdict_get(device, "properties")) == QTYPE_QLIST)
+                {
+                    properties = qobject_to_qlist(qdict_get(device, "properties"));
+                }
+
+                sb = make_configurable_device(qemu_name, address, properties);
+
+                if(qdict_haskey(device, "irq_mq") &&
                    qdict_haskey(device, "semaphore_name"))
                 {
-                    g_assert(qobject_type(qdict_get(device, "file_name")) == QTYPE_QSTRING);
-                    g_assert(qobject_type(qdict_get(device, "semaphore_name")) == QTYPE_QSTRING);
-                    const char *file_name = qdict_get_str(device, "file_name");
+                    QDICT_ASSERT_KEY_TYPE(device, "irq_mq", QTYPE_QSTRING);
+                    QDICT_ASSERT_KEY_TYPE(device, "semaphore_name", QTYPE_QSTRING);
+
+                    const char *mq_name = qdict_get_str(device, "irq_mq");
                     const char *semaphore_name = qdict_get_str(device, "semaphore_name");
 
                     g_assert(sb->num_mmio == 1);
 
-                    make_device_shareble(sb, irq, file_name, semaphore_name);
+                    make_device_shareble(sb, mq_name, semaphore_name);
                 }
             }
             else
@@ -274,17 +309,6 @@ static void board_init(MachineState * ms)
     }
 
 }
-
-/*
-    g_assert((qdict_haskey(conf, "entry_address") || qdict_haskey(conf, "init_state")));
-    if (qdict_haskey(conf, "entry_address")) {
-	    g_assert(qobject_type(qdict_get(conf, "entry_address")) == QTYPE_QINT);
-	    entry_address = qdict_get_int(conf, "entry_address");
-        // Just set the entry address
-        ((CPUARMState *) cpu)->thumb = (entry_address & 1) != 0 ? 1 : 0;
-        ((CPUARMState *) cpu)->regs[15] = entry_address & (~1);
-    }
-*/
 
 static struct arm_boot_info boot_info;
 
