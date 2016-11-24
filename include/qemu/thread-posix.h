@@ -48,6 +48,7 @@ typedef struct {
 
 typedef struct {
     mqd_t mq;
+    bool valid;
 } QemuAvatarMessageQueue;
 
 void qemu_avatar_sem_wait(QemuAvatarSemaphore *sem);
@@ -58,5 +59,5 @@ void qemu_avatar_mq_open_read(QemuAvatarMessageQueue *mq, const char *name);
 void qemu_avatar_mq_open_write(QemuAvatarMessageQueue *mq, const char *name);
 void qemu_avatar_mq_send(QemuAvatarMessageQueue *mq, void *msg, size_t len);
 void qemu_avatar_mq_receive(QemuAvatarMessageQueue *mq, void *buffer, size_t len);
-
+bool qemu_avatar_mq_is_valid(QemuAvatarMessageQueue *mq);
 #endif

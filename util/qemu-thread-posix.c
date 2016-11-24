@@ -581,6 +581,7 @@ void qemu_avatar_mq_open_read(QemuAvatarMessageQueue *mq, const char *name)
     }
 
     mq->mq = m;
+    mq->valid = true;
 #endif
 }
 
@@ -596,6 +597,7 @@ void qemu_avatar_mq_open_write(QemuAvatarMessageQueue *mq, const char *name)
     }
 
     mq->mq = m;
+    mq->valid = true;
 #endif
 }
 
@@ -625,3 +627,7 @@ void qemu_avatar_mq_receive(QemuAvatarMessageQueue *mq, void *buffer, size_t len
 #endif
 }
 
+bool qemu_avatar_mq_is_valid(QemuAvatarMessageQueue *mq)
+{
+    return mq->valid;
+}
