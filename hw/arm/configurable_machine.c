@@ -25,6 +25,7 @@
 #include "qemu/thread.h"
 #include "exec/ram_addr.h"
 #include "avatar/irq.h"
+#include "avatar/avatar-io.h"
 
 #define QDICT_ASSERT_KEY_TYPE(_dict, _key, _type) \
     g_assert(qdict_haskey(_dict, _key) && qobject_type(qdict_get(_dict, _key)) == _type)
@@ -78,16 +79,16 @@ static void dispatch_interrupt(void *opaque, int irq, int level)
     if(opaque == NULL)
         return;
 
-    SysBusDevice *sb = SYS_BUS_DEVICE(opaque);
-    MemoryRegion *mr;
+    //SysBusDevice *sb = SYS_BUS_DEVICE(opaque);
+    //MemoryRegion *mr;
     IRQ_MSG msg = {
         .irq_num = irq,
         .level = level
     };
 
-    mr = sysbus_mmio_get_region(sb, 0);
-    //TODO: IPC
-    qemu_avatar_mq_send(&(mr->mq), &msg, sizeof(msg));
+    //mr = sysbus_mmio_get_region(sb, 0);
+
+    qemu_avatar_mq_send(&outgoingMQ, &msg, sizeof(msg));
 }
 
 static uint64_t thread_safe_read(void *opaque, hwaddr addr, unsigned size)
@@ -125,7 +126,7 @@ static const MemoryRegionOps thared_safe_ops = {
 
 static void load_program(QDict *conf, ARMCPU *cpu);
 
-static void make_device_shareble(SysBusDevice *sb, const char *mq_path, const char *sem_name)
+static void make_device_shareble(SysBusDevice *sb, const char *sem_name)
 {
     MemoryRegion *mr;
 
@@ -138,7 +139,6 @@ static void make_device_shareble(SysBusDevice *sb, const char *mq_path, const ch
     mr->opaque = mr;
     mr->ops = &thared_safe_ops;
     qemu_avatar_sem_open(&(mr->semaphore), sem_name);
-    qemu_avatar_mq_open_write(&(mr->mq), mq_path);
 }
 
 static void set_properties(DeviceState *dev, QList *properties)
@@ -246,6 +246,19 @@ static void board_init(MachineState * ms)
 
     load_program(conf, cpuu);
 
+    if(qdict_haskey(conf, "irq_mq"))
+    {
+        QDICT_ASSERT_KEY_TYPE(conf, "irq_mq", QTYPE_QSTRING);
+        const char *mq_name = qdict_get_str(conf, "irq_mq");
+        qemu_avatar_mq_open_write(&outgoingMQ, mq_name);
+    }
+
+    if(qdict_haskey(conf, "read_write_mq"))
+    {
+        QDICT_ASSERT_KEY_TYPE(conf, "read_write_mq", QTYPE_QSTRING);
+        const char *mq_name = qdict_get_str(conf, "read_write_mq");
+        qemu_avatar_mq_open_write(&incomingMQ, mq_name);
+    }
     /*
      * The devices stuff is just considered a hack, I want to replace everything here with a device tree parser as soon as I have the time ...
      */
@@ -287,18 +300,15 @@ static void board_init(MachineState * ms)
 
                 sb = make_configurable_device(qemu_name, address, properties);
 
-                if(qdict_haskey(device, "irq_mq") &&
-                   qdict_haskey(device, "semaphore_name"))
+                if(qdict_haskey(device, "semaphore_name"))
                 {
-                    QDICT_ASSERT_KEY_TYPE(device, "irq_mq", QTYPE_QSTRING);
                     QDICT_ASSERT_KEY_TYPE(device, "semaphore_name", QTYPE_QSTRING);
 
-                    const char *mq_name = qdict_get_str(device, "irq_mq");
                     const char *semaphore_name = qdict_get_str(device, "semaphore_name");
 
                     g_assert(sb->num_mmio == 1);
 
-                    make_device_shareble(sb, mq_name, semaphore_name);
+                    make_device_shareble(sb, semaphore_name);
                 }
             }
             else

@@ -8,3 +8,4 @@ io-obj-y += channel-watch.o
 io-obj-y += channel-websock.o
 io-obj-y += channel-util.o
 io-obj-y += task.o
+io-obj-y += avatar-io.o
