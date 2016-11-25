@@ -17,9 +17,10 @@ struct _AvatarIOResponseMessage {
 typedef struct _AvatarIORequestMessage  AvatarIORequestMessage;
 typedef struct _AvatarIOResponseMessage AvatarIOResponseMessage;
 
-extern QemuAvatarMessageQueue incomingMQ;
-extern QemuAvatarMessageQueue outgoingMQ;
+extern QemuAvatarMessageQueue ioRequestMQ;
+extern QemuAvatarMessageQueue ioResponseMQ;
+extern QemuAvatarMessageQueue IrqMQ;
 
-void avatar_serve_io(void);
+void avatar_serve_io(void *);
 
 #endif

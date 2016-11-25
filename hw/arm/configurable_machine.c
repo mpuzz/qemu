@@ -88,7 +88,7 @@ static void dispatch_interrupt(void *opaque, int irq, int level)
 
     //mr = sysbus_mmio_get_region(sb, 0);
 
-    qemu_avatar_mq_send(&outgoingMQ, &msg, sizeof(msg));
+    qemu_avatar_mq_send(&IrqMQ, &msg, sizeof(msg));
 }
 
 static uint64_t thread_safe_read(void *opaque, hwaddr addr, unsigned size)
@@ -250,14 +250,27 @@ static void board_init(MachineState * ms)
     {
         QDICT_ASSERT_KEY_TYPE(conf, "irq_mq", QTYPE_QSTRING);
         const char *mq_name = qdict_get_str(conf, "irq_mq");
-        qemu_avatar_mq_open_write(&outgoingMQ, mq_name);
+        qemu_avatar_mq_open_write(&IrqMQ, mq_name, sizeof(IrqMQ));
     }
 
-    if(qdict_haskey(conf, "read_write_mq"))
+    if(qdict_haskey(conf, "io_request_mq"))
     {
-        QDICT_ASSERT_KEY_TYPE(conf, "read_write_mq", QTYPE_QSTRING);
-        const char *mq_name = qdict_get_str(conf, "read_write_mq");
-        qemu_avatar_mq_open_write(&incomingMQ, mq_name);
+        if(!qdict_haskey(conf, "io_response_mq"))
+        {
+            fprintf(stderr, "Both the IO messages queue needed\n");
+            exit(1);
+        }
+
+        QDICT_ASSERT_KEY_TYPE(conf, "io_request_mq", QTYPE_QSTRING);
+        QDICT_ASSERT_KEY_TYPE(conf, "io_response_mq", QTYPE_QSTRING);
+        const char *mq_name = qdict_get_str(conf, "io_request_mq");
+        int fd;
+        qemu_avatar_mq_open_read(&ioRequestMQ, mq_name, sizeof(ioRequestMQ));
+        fd = qemu_avatar_mq_get_fd(&ioRequestMQ);
+        qemu_set_fd_handler(fd, avatar_serve_io, NULL, NULL);
+
+        mq_name = qdict_get_str(conf, "io_response_mq");
+        qemu_avatar_mq_open_write(&ioResponseMQ, mq_name, sizeof(ioResponseMQ));
     }
     /*
      * The devices stuff is just considered a hack, I want to replace everything here with a device tree parser as soon as I have the time ...

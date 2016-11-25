@@ -3,10 +3,24 @@
 #include "qemu/thread.h"
 #include "avatar/avatar-io.h"
 
-QemuAvatarMessageQueue incomingMQ;
-QemuAvatarMessageQueue outgoingMQ;
+QemuAvatarMessageQueue ioRequestMQ;
+QemuAvatarMessageQueue ioResponseMQ;
+QemuAvatarMessageQueue IrqMQ;
 
-void avatar_serve_io(void)
+void avatar_serve_io(void *opaque)
 {
-    if(!qemu_avatar_mq_is_valid(&incomingMQ)) return;
+    AvatarIORequestMessage req;
+    int ret;
+
+    if(!qemu_avatar_mq_is_valid(&ioRequestMQ)) return;
+
+    ret = qemu_avatar_mq_receive(&ioRequestMQ, &req, sizeof(req));
+
+    if(ret != sizeof(req))
+    {
+        fprintf(stderr, "Received message of the wrong size. Skipping\n");
+        return;
+    }
+
+    fprintf(stderr, "Stub\n");
 }
