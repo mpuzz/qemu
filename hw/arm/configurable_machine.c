@@ -250,7 +250,7 @@ static void board_init(MachineState * ms)
     {
         QDICT_ASSERT_KEY_TYPE(conf, "irq_mq", QTYPE_QSTRING);
         const char *mq_name = qdict_get_str(conf, "irq_mq");
-        qemu_avatar_mq_open_write(&IrqMQ, mq_name, sizeof(IrqMQ));
+        qemu_avatar_mq_open_write(&IrqMQ, mq_name, sizeof(IRQ_MSG));
     }
 
     if(qdict_haskey(conf, "io_request_mq"))
@@ -265,12 +265,14 @@ static void board_init(MachineState * ms)
         QDICT_ASSERT_KEY_TYPE(conf, "io_response_mq", QTYPE_QSTRING);
         const char *mq_name = qdict_get_str(conf, "io_request_mq");
         int fd;
-        qemu_avatar_mq_open_read(&ioRequestMQ, mq_name, sizeof(ioRequestMQ));
+        qemu_avatar_mq_open_read(&ioRequestMQ, mq_name,
+                                 sizeof(AvatarIORequestMessage));
         fd = qemu_avatar_mq_get_fd(&ioRequestMQ);
         qemu_set_fd_handler(fd, avatar_serve_io, NULL, NULL);
 
         mq_name = qdict_get_str(conf, "io_response_mq");
-        qemu_avatar_mq_open_write(&ioResponseMQ, mq_name, sizeof(ioResponseMQ));
+        qemu_avatar_mq_open_write(&ioResponseMQ, mq_name,
+                                  sizeof(AvatarIOResponseMessage));
     }
     /*
      * The devices stuff is just considered a hack, I want to replace everything here with a device tree parser as soon as I have the time ...
