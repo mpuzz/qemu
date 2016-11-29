@@ -188,8 +188,11 @@ static SysBusDevice *make_configurable_device(const char *qemu_name, uint64_t ad
 
     s = SYS_BUS_DEVICE(dev);
     sysbus_mmio_map(s, 0, address);
-    irq = qemu_allocate_irq(dispatch_interrupt, dev, 1);
-    sysbus_connect_irq(s, 0, irq);
+    if(qemu_avatar_mq_get_fd(&IrqMQ))
+    {
+        irq = qemu_allocate_irq(dispatch_interrupt, dev, 1);
+        sysbus_connect_irq(s, 0, irq);
+    }
 
     return s;
 }
