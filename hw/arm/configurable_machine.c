@@ -124,7 +124,6 @@ static const MemoryRegionOps thared_safe_ops = {
     .endianness = DEVICE_NATIVE_ENDIAN,
 };
 
-static void load_program(QDict *conf, ARMCPU *cpu);
 
 static void make_device_shareble(SysBusDevice *sb, const char *sem_name)
 {
@@ -221,12 +220,7 @@ static SysBusDevice *make_configurable_device(const char *qemu_name, uint64_t ad
 static void board_init(MachineState * ms)
 {
     const char *kernel_filename = ms->kernel_filename;
-    const char *cpu_model = ms->cpu_model;
 
-    ObjectClass *cpu_oc;
-    Object *cpuobj;
-    ARMCPU *cpuu;
-    CPUState *cpu;
     QDict * conf = NULL;
 
     //Load configuration file
@@ -238,37 +232,6 @@ static void board_init(MachineState * ms)
     {
         conf = qdict_new();
     }
-
-    //Configure CPU
-    if (qdict_haskey(conf, "cpu_model"))
-    {
-        cpu_model = qdict_get_str(conf, "cpu_model");
-        g_assert(cpu_model);
-    }
-
-    if (!cpu_model) cpu_model = "arm926";
-
-    printf("Configurable: Adding processor %s\n", cpu_model);
-
-    cpu_oc = cpu_class_by_name(TYPE_ARM_CPU, cpu_model);
-    if (!cpu_oc) {
-        fprintf(stderr, "Unable to find CPU definition\n");
-        exit(1);
-    }
-
-    cpuobj = object_new(object_class_get_name(cpu_oc));
-
-    object_property_set_bool(cpuobj, true, "realized", &error_fatal);
-    cpuu = ARM_CPU(cpuobj);
-    cpu = CPU(cpuu);
-    cpu = (CPUState *) &(cpuu->env);
-    if (!cpu)
-    {
-        fprintf(stderr, "Unable to find CPU definition\n");
-        exit(1);
-    }
-
-    load_program(conf, cpuu);
 
     if(qdict_haskey(conf, "irq_mq"))
     {
@@ -360,35 +323,6 @@ static void board_init(MachineState * ms)
             }
         }
     }
-}
-
-static struct arm_boot_info boot_info;
-
-static void load_program(QDict *conf, ARMCPU *cpu)
-{
-    const char *program;
-    MemoryRegion *sysmem = get_system_memory();
-    MemoryRegion *ram = g_new(MemoryRegion, 1);
-    size_t ram_size = 1024 * 1024;
-
-    g_assert(qdict_haskey(conf, "kernel"));
-    program = qdict_get_str(conf, "kernel");
-
-    if(qdict_haskey(conf, "ram_size"))
-    {
-        ram_size = qdict_get_int(conf, "ram_size");
-    }
-
-    memory_region_allocate_system_memory(ram, NULL, "configurable.ram", ram_size);
-    memory_region_add_subregion(sysmem, 0, ram);
-
-    boot_info.ram_size = ram_size;
-    boot_info.kernel_filename = program;
-    boot_info.kernel_cmdline = "";
-    boot_info.initrd_filename = "";
-    boot_info.board_id = 1;
-    arm_load_kernel(cpu, &boot_info);
-
 }
 
 static void configurable_machine_class_init(ObjectClass *oc, void *data)
