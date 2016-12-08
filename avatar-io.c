@@ -12,6 +12,8 @@ QemuAvatarMessageQueue ioRequestMQ;
 QemuAvatarMessageQueue ioResponseMQ;
 QemuAvatarMessageQueue IrqMQ;
 
+uint32_t state_id = 0;
+
 static void avatar_serve_read(AvatarIORequestMessage *req)
 {  
     uint64_t value;
@@ -27,6 +29,10 @@ static void avatar_serve_read(AvatarIORequestMessage *req)
 
 static void avatar_serve_write(AvatarIORequestMessage *req)
 {
+    if(forked == 2)
+        printf("Son\n");
+    else
+        printf("Partent\n");
     MemTxResult memres = address_space_write(&address_space_memory, req->hwaddr,
                                              MEMTXATTRS_UNSPECIFIED, (uint8_t *) &req->value, 4);
     AvatarIOResponseMessage res;
@@ -50,7 +56,17 @@ void avatar_serve_io(void *opaque)
         return;
     }
 
-    if(req.write) avatar_serve_write(&req);
-    else          avatar_serve_read(&req);
-
+    switch(req.operation)
+    {
+      case AVATAR_READ:
+          avatar_serve_read(&req);
+          break;
+      case AVATAR_WRITE:
+          avatar_serve_write(&req);
+          break;
+      case AVATAR_FORK:
+          break;
+      case AVATAR_CLOSE:
+          break;
+    }
 }
