@@ -658,3 +658,21 @@ int qemu_avatar_mq_get_fd(QemuAvatarMessageQueue *mq)
 {
     return mq->mq;
 }
+
+void qemu_avatar_mq_copy(QemuAvatarMessageQueue *src, QemuAvatarMessageQueue *dst)
+{
+    dst->mq = src->mq;
+    dst->valid = src->valid;
+}
+
+void qemu_avatar_mq_close(QemuAvatarMessageQueue *mq)
+{
+#if defined(__APPLE__) || defined(__NetBSD__)
+#else
+    if(mq->valid)
+    {
+        mq_close(mq->mq);
+        mq->valid = false;
+    }
+#endif
+}

@@ -61,4 +61,6 @@ void qemu_avatar_mq_send(QemuAvatarMessageQueue *mq, void *msg, size_t len);
 int  qemu_avatar_mq_receive(QemuAvatarMessageQueue *mq, void *buffer, size_t len);
 bool qemu_avatar_mq_is_valid(QemuAvatarMessageQueue *mq);
 int  qemu_avatar_mq_get_fd(QemuAvatarMessageQueue *mq);
+void qemu_avatar_mq_copy(QemuAvatarMessageQueue *src, QemuAvatarMessageQueue *dst);
+void qemu_avatar_mq_close(QemuAvatarMessageQueue *mq);
 #endif
