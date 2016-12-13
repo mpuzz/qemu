@@ -21,7 +21,7 @@
 
 #include "hw/arm/stm32.h"
 #include "qemu/bitops.h"
-
+#include "qapi/error.h"
 
 
 /* DEFINITIONS */

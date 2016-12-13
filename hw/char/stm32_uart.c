@@ -19,7 +19,9 @@
  * You should have received a copy of the GNU General Public License along
  * with this program; if not, see <http://www.gnu.org/licenses/>.
  */
-
+#include "qemu/osdep.h"
+#include "hw/hw.h"
+#include "hw/arm/arm.h"
 #include "hw/sysbus.h"
 #include "hw/arm/stm32.h"
 #include "sysemu/char.h"
@@ -124,7 +126,7 @@ struct Stm32Uart {
     struct QEMUTimer *rx_timer;
     struct QEMUTimer *tx_timer;
 
-    CharDriverState *chr;
+    CharBackend chr;
 
     /* Stores the USART pin mapping used by the board.  This is used to check
      * the AFIO's USARTx_REMAP register to make sure the software has set
@@ -239,9 +241,9 @@ static void stm32_uart_start_tx(Stm32Uart *s, uint32_t value)
     s->USART_SR_TC = 0;
 
     /* Write the character out. */
-    if (s->chr) {
-        qemu_chr_fe_write(s->chr, &ch, 1);
-    }
+//    if (s->chr) {
+        qemu_chr_fe_write_all(&s->chr, &ch, 1);
+        //  }
 #ifdef STM32_UART_NO_BAUD_DELAY
     /* If BAUD delays are not being simulated, then immediately mark the
      * transmission as complete.
@@ -706,28 +708,33 @@ static const MemoryRegionOps stm32_uart_ops = {
     .endianness = DEVICE_NATIVE_ENDIAN
 };
 
+static void stm32_uart_realize(DeviceState *dev, Error **errp)
+{
+    Stm32Uart *s = (Stm32Uart *)(dev);
 
+    qemu_chr_fe_set_handlers(&s->chr, stm32_uart_can_receive, stm32_uart_receive,
+                             stm32_uart_event, s, NULL, true);
+}
 
 
 
 /* PUBLIC FUNCTIONS */
 
-void stm32_uart_connect(Stm32Uart *s, CharDriverState *chr,
-                        uint32_t afio_board_map)
-{
-    s->chr = chr;
-    if (chr) {
-        qemu_chr_add_handlers(
-                s->chr,
-                stm32_uart_can_receive,
-                stm32_uart_receive,
-                stm32_uart_event,
-                (void *)s);
-    }
+/* void stm32_uart_connect(Stm32Uart *s, CharBackend *chr, */
+/*                         uint32_t afio_board_map) */
+/* { */
+/*     s->chr = chr; */
+/*     if (chr) { */
+/*         qemu_chr_add_handlers( */
+/*                 s->chr, */
+/*                 stm32_uart_can_receive, */
+/*                 stm32_uart_receive, */
+/*                 stm32_uart_event, */
+/*                 (void *)s); */
+/*     } */
 
-    s->afio_board_map = afio_board_map;
-}
-
+/*     s->afio_board_map = afio_board_map; */
+/* } */
 
 
 
@@ -770,6 +777,7 @@ static Property stm32_uart_properties[] = {
     DEFINE_PROP_PTR("stm32_rcc", Stm32Uart, stm32_rcc_prop),
     DEFINE_PROP_PTR("stm32_gpio", Stm32Uart, stm32_gpio_prop),
     DEFINE_PROP_PTR("stm32_afio", Stm32Uart, stm32_afio_prop),
+    DEFINE_PROP_CHR("chardev", Stm32Uart, chr),
     DEFINE_PROP_END_OF_LIST()
 };
 
@@ -779,6 +787,7 @@ static void stm32_uart_class_init(ObjectClass *klass, void *data)
     SysBusDeviceClass *k = SYS_BUS_DEVICE_CLASS(klass);
 
     k->init = stm32_uart_init;
+    dc->realize = stm32_uart_realize;
     dc->reset = stm32_uart_reset;
     dc->props = stm32_uart_properties;
 }

@@ -303,7 +303,7 @@ struct Stm32Rcc {
     qemu_irq irq;
 };
 
-
+static int external_ref_clock_scale;
 
 /* HELPER FUNCTIONS */
 
@@ -734,8 +734,8 @@ static void stm32_rcc_hclk_upd_irq_handler(void *opaque, int n, int level)
          * (which is an unchanging number independent of the CPU frequency) to
          * system/external clock ticks.
          */
-        system_clock_scale = get_ticks_per_sec() / hclk_freq;
-        external_ref_clock_scale = get_ticks_per_sec() / ext_ref_freq;
+        system_clock_scale = NANOSECONDS_PER_SECOND / hclk_freq;
+        external_ref_clock_scale = NANOSECONDS_PER_SECOND / ext_ref_freq;
     }
 
 #ifdef DEBUG_STM32_RCC
