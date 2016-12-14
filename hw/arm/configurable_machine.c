@@ -141,6 +141,8 @@ static void make_device_shareble(SysBusDevice *sb, const char *sem_name)
     qemu_avatar_sem_open(&(mr->semaphore), sem_name);
 }
 
+static QDict *peripherals;
+
 static void set_properties(DeviceState *dev, QList *properties)
 {
     QListEntry *entry;
@@ -170,6 +172,25 @@ static void set_properties(DeviceState *dev, QList *properties)
             QDICT_ASSERT_KEY_TYPE(property, "value", QTYPE_QSTRING);
             const char *value = qdict_get_str(property, "value");
             qdev_prop_set_string(dev, name, value);
+        }
+        else if(!strcmp(type, "int32"))
+        {
+            QDICT_ASSERT_KEY_TYPE(property, "value", QTYPE_QINT);
+            const int value = qdict_get_int(property, "value");
+            qdev_prop_set_int32(dev, name, value);
+        }
+        else if(!strcmp(type, "uint32"))
+        {
+            QDICT_ASSERT_KEY_TYPE(property, "value", QTYPE_QINT);
+            const int value = qdict_get_int(property, "value");
+            qdev_prop_set_uint32(dev, name, value);
+        }
+        else if(!strcmp(type, "device"))
+        {
+            QDICT_ASSERT_KEY_TYPE(property, "value", QTYPE_QSTRING);
+            const char *value = qdict_get_str(property, "value");
+            QObject *pr = qdict_get(peripherals, value);
+            qdev_prop_set_ptr(dev, name, (void *) pr);
         }
     }
 }
@@ -282,6 +303,7 @@ static void board_init(MachineState * ms)
      */
     if (qdict_haskey(conf, "devices"))
     {
+        peripherals = qdict_new();
         QListEntry * entry;
         QList * devices = qobject_to_qlist(qdict_get(conf, "devices"));
         g_assert(devices);
@@ -292,6 +314,7 @@ static void board_init(MachineState * ms)
 
             const char * qemu_name;
             const char * bus;
+            const char * name;
             uint64_t address;
 
             g_assert(qobject_type(entry->value) == QTYPE_QDICT);
@@ -300,10 +323,12 @@ static void board_init(MachineState * ms)
             QDICT_ASSERT_KEY_TYPE(device, "address", QTYPE_QINT);
             QDICT_ASSERT_KEY_TYPE(device, "qemu_name", QTYPE_QSTRING);
             QDICT_ASSERT_KEY_TYPE(device, "bus", QTYPE_QSTRING);
+            QDICT_ASSERT_KEY_TYPE(device, "name", QTYPE_QSTRING);
 
             bus = qdict_get_str(device, "bus");
             qemu_name = qdict_get_str(device, "qemu_name");
             address = qdict_get_int(device, "address");
+            name = qdict_get_str(device, "name");
 
             if (strcmp(bus, "sysbus") == 0)
             {
@@ -317,7 +342,7 @@ static void board_init(MachineState * ms)
                 }
 
                 sb = make_configurable_device(qemu_name, address, properties);
-
+                qdict_put_obj(peripherals, name, (QObject *)sb);
                 if(qdict_haskey(device, "semaphore_name"))
                 {
                     QDICT_ASSERT_KEY_TYPE(device, "semaphore_name", QTYPE_QSTRING);
@@ -335,7 +360,6 @@ static void board_init(MachineState * ms)
             }
         }
     }
-
 }
 
 static struct arm_boot_info boot_info;
