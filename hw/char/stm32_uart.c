@@ -84,6 +84,7 @@ struct Stm32Uart {
     void *stm32_rcc_prop;
     void *stm32_gpio_prop;
     void *stm32_afio_prop;
+    void *chr_prop;
 
     /* Private */
     MemoryRegion iomem;
@@ -711,43 +712,47 @@ static const MemoryRegionOps stm32_uart_ops = {
 static void stm32_uart_realize(DeviceState *dev, Error **errp)
 {
     Stm32Uart *s = (Stm32Uart *)(dev);
+    qemu_irq *clk_irq;
+    
+    s->stm32_rcc = (Stm32Rcc *)s->stm32_rcc_prop;
+    s->stm32_gpio = (Stm32Gpio **)s->stm32_gpio_prop;
+    s->stm32_afio = (Stm32Afio *)s->stm32_afio_prop;
+
+    clk_irq =
+        qemu_allocate_irqs(stm32_uart_clk_irq_handler, (void *)s, 1);
+    stm32_rcc_set_periph_clk_irq(s->stm32_rcc, s->periph, clk_irq[0]);
 
     qemu_chr_fe_set_handlers(&s->chr, stm32_uart_can_receive, stm32_uart_receive,
                              stm32_uart_event, s, NULL, true);
+    stm32_uart_reset((DeviceState *)s);
 }
 
 
 
 /* PUBLIC FUNCTIONS */
 
-/* void stm32_uart_connect(Stm32Uart *s, CharBackend *chr, */
-/*                         uint32_t afio_board_map) */
-/* { */
-/*     s->chr = chr; */
-/*     if (chr) { */
-/*         qemu_chr_add_handlers( */
-/*                 s->chr, */
-/*                 stm32_uart_can_receive, */
-/*                 stm32_uart_receive, */
-/*                 stm32_uart_event, */
-/*                 (void *)s); */
-/*     } */
-
-/*     s->afio_board_map = afio_board_map; */
-/* } */
-
-
+//void stm32_uart_connect(Stm32Uart *s, CharDriverState *chr,
+//                        uint32_t afio_board_map)
+//{
+//  s->chr = chr;
+//    if (chr) {
+//      qemu_chr_add_handlers(
+//          s->chr,
+//          stm32_uart_can_receive,
+//          stm32_uart_receive,
+//          stm32_uart_event,
+//          (void *)s);
+//  }
+//
+//  s->afio_board_map = afio_board_map;
+//}
 
 /* DEVICE INITIALIZATION */
 
-static int stm32_uart_init(SysBusDevice *dev)
+static void stm32_uart_init(Object *obj)
 {
-    qemu_irq *clk_irq;
+    SysBusDevice *dev = SYS_BUS_DEVICE(obj);
     Stm32Uart *s = STM32_UART(dev);
-
-    s->stm32_rcc = (Stm32Rcc *)s->stm32_rcc_prop;
-    s->stm32_gpio = (Stm32Gpio **)s->stm32_gpio_prop;
-    s->stm32_afio = (Stm32Afio *)s->stm32_afio_prop;
 
     memory_region_init_io(&s->iomem, OBJECT(s), &stm32_uart_ops, s,
                           "uart", 0x03ff);
@@ -762,14 +767,6 @@ static int stm32_uart_init(SysBusDevice *dev)
         timer_new_ns(QEMU_CLOCK_VIRTUAL,
                   (QEMUTimerCB *)stm32_uart_tx_timer_expire, s);
 
-    /* Register handlers to handle updates to the USART's peripheral clock. */
-    clk_irq =
-          qemu_allocate_irqs(stm32_uart_clk_irq_handler, (void *)s, 1);
-    stm32_rcc_set_periph_clk_irq(s->stm32_rcc, s->periph, clk_irq[0]);
-
-    stm32_uart_reset((DeviceState *)s);
-
-    return 0;
 }
 
 static Property stm32_uart_properties[] = {
@@ -784,9 +781,9 @@ static Property stm32_uart_properties[] = {
 static void stm32_uart_class_init(ObjectClass *klass, void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
-    SysBusDeviceClass *k = SYS_BUS_DEVICE_CLASS(klass);
+//    SysBusDeviceClass *k = SYS_BUS_DEVICE_CLASS(klass);
 
-    k->init = stm32_uart_init;
+//    k->init = stm32_uart_init;
     dc->realize = stm32_uart_realize;
     dc->reset = stm32_uart_reset;
     dc->props = stm32_uart_properties;
@@ -796,6 +793,7 @@ static TypeInfo stm32_uart_info = {
     .name  = "stm32-uart",
     .parent = TYPE_SYS_BUS_DEVICE,
     .instance_size  = sizeof(Stm32Uart),
+    .instance_init = stm32_uart_init,
     .class_init = stm32_uart_class_init
 };
 

@@ -126,7 +126,7 @@ static void stm32_p103_init(MachineState *machine)
     qemu_add_kbd_event_handler(stm32_p103_key_event, s);
 
     /* Connect RS232 to UART */
-    stm32_uart_connect(
+/*    stm32_uart_connect(
             (Stm32Uart *)uart2,
             serial_hds[0],
             STM32_USART2_NO_REMAP);
@@ -139,19 +139,26 @@ static void stm32_p103_init(MachineState *machine)
     stm32_uart_connect(
             (Stm32Uart *)uart3,
             serial_hds[0],
-            STM32_USART3_NO_REMAP);
+            STM32_USART3_NO_REMAP);*/
  }
+static void stm32_p103_class_init(ObjectClass *oc, void *data)
+{
+    MachineClass *mc = MACHINE_CLASS(oc);
 
-static QEMUMachine stm32_p103_machine = {
-    .name = "stm32-p103",
-    .desc = "Olimex STM32 p103 Dev Board",
-    .init = stm32_p103_init,
+    mc->desc = "Olimex STM32 p103 Dev Board";
+    mc->init = stm32_p103_init;
+}
+
+static const TypeInfo stm32_p103_machine_type = {
+    .name = MACHINE_TYPE_NAME("stm32-p103"),
+    .parent = TYPE_MACHINE,
+    .class_init = stm32_p103_class_init
 };
 
 
 static void stm32_p103_machine_init(void)
 {
-    qemu_register_machine(&stm32_p103_machine);
+    type_register_static(&stm32_p103_machine_type);
 }
 
-machine_init(stm32_p103_machine_init);
+type_init(stm32_p103_machine_init);

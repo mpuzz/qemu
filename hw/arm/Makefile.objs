@@ -20,4 +20,4 @@ obj-$(CONFIG_FSL_IMX31) += fsl-imx31.o kzm.o
 obj-$(CONFIG_FSL_IMX6) += fsl-imx6.o sabrelite.o
 obj-$(CONFIG_ASPEED_SOC) += aspeed_soc.o aspeed.o
 
-obj-y += stm32.o stm32_rcc.o stm32_clktree.o
+obj-y += stm32.o stm32_rcc.o stm32_clktree.o stm32_p103.o stm32_adc.o stm32_dac.o stm32_iwdg.o

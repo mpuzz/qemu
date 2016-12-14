@@ -22,6 +22,7 @@
 #include "hw/arm/stm32.h"
 #include "exec/address-spaces.h"
 #include "exec/gdbstub.h"
+#include "sysemu/sysemu.h"
 
 /* DEFINITIONS */
 
@@ -127,7 +128,8 @@ static void stm32_create_uart_dev(
         DeviceState **gpio_dev,
         DeviceState *afio_dev,
         hwaddr addr,
-        qemu_irq irq)
+        qemu_irq irq,
+        CharDriverState *serial)
 {
     char child_name[8];
     DeviceState *uart_dev = qdev_create(NULL, "stm32-uart");
@@ -135,6 +137,7 @@ static void stm32_create_uart_dev(
     qdev_prop_set_ptr(uart_dev, "stm32_rcc", rcc_dev);
     qdev_prop_set_ptr(uart_dev, "stm32_gpio", gpio_dev);
     qdev_prop_set_ptr(uart_dev, "stm32_afio", afio_dev);
+    qdev_prop_set_chr(uart_dev, "chardev", serial);
     snprintf(child_name, sizeof(child_name), "uart[%i]", uart_num);
     object_property_add_child(stm32_container, child_name, OBJECT(uart_dev), NULL);
     stm32_init_periph(uart_dev, periph, addr, irq);
@@ -236,8 +239,8 @@ void stm32_init(
     nvic = armv7m_init(
         // stm32_container,
               address_space_mem,
-              flash_size,
               ram_size,
+              64,
               kernel_filename,
               "cortex-m3");
     
@@ -306,11 +309,11 @@ void stm32_init(
     object_property_add_child(stm32_container, "afio", OBJECT(afio_dev), NULL);
     stm32_init_periph(afio_dev, STM32_AFIO_PERIPH, 0x40010000, NULL);
 
-    stm32_create_uart_dev(stm32_container, STM32_UART1, 1, rcc_dev, gpio_dev, afio_dev, 0x40013800, qdev_get_gpio_in(nvic, STM32_UART1_IRQ));
-    stm32_create_uart_dev(stm32_container, STM32_UART2, 2, rcc_dev, gpio_dev, afio_dev, 0x40004400, qdev_get_gpio_in(nvic, STM32_UART2_IRQ));
-    stm32_create_uart_dev(stm32_container, STM32_UART3, 3, rcc_dev, gpio_dev, afio_dev, 0x40004800, qdev_get_gpio_in(nvic, STM32_UART3_IRQ));
-    stm32_create_uart_dev(stm32_container, STM32_UART4, 4, rcc_dev, gpio_dev, afio_dev, 0x40004c00, qdev_get_gpio_in(nvic, STM32_UART4_IRQ));
-    stm32_create_uart_dev(stm32_container, STM32_UART5, 5, rcc_dev, gpio_dev, afio_dev, 0x40005000, qdev_get_gpio_in(nvic, STM32_UART5_IRQ));
+    stm32_create_uart_dev(stm32_container, STM32_UART1, 1, rcc_dev, gpio_dev, afio_dev, 0x40013800, qdev_get_gpio_in(nvic, STM32_UART1_IRQ), serial_hds[0]);
+    stm32_create_uart_dev(stm32_container, STM32_UART2, 2, rcc_dev, gpio_dev, afio_dev, 0x40004400, qdev_get_gpio_in(nvic, STM32_UART2_IRQ), serial_hds[1]);
+    stm32_create_uart_dev(stm32_container, STM32_UART3, 3, rcc_dev, gpio_dev, afio_dev, 0x40004800, qdev_get_gpio_in(nvic, STM32_UART3_IRQ), serial_hds[2]);
+    stm32_create_uart_dev(stm32_container, STM32_UART4, 4, rcc_dev, gpio_dev, afio_dev, 0x40004c00, qdev_get_gpio_in(nvic, STM32_UART4_IRQ), serial_hds[3]);
+    stm32_create_uart_dev(stm32_container, STM32_UART5, 5, rcc_dev, gpio_dev, afio_dev, 0x40005000, qdev_get_gpio_in(nvic, STM32_UART5_IRQ), serial_hds[4]);
 
     /* Timer 1 has four interrupts but only the TIM1 Update interrupt is implemented. */
     /*qemu_irq tim1_irqs[] = { qdev_get_gpio_in(nvic, TIM1_BRK_IRQn), qdev_get_gpio_in(nvic, TIM1_UP_IRQn), qdev_get_gpio_in(nvic, TIM1_TRG_COM_IRQn), qdev_get_gpio_in(nvic, TIM1_CC_IRQn)};*/

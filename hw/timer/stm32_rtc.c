@@ -20,6 +20,7 @@
  * with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "qemu/osdep.h"
 #include "hw/arm/stm32.h"
 #include "hw/arm/stm32_clktree.h"
 #include "qemu/bitops.h"
@@ -331,7 +332,7 @@ static int stm32_rtc_init(SysBusDevice *dev)
     sysbus_init_irq(dev, &s->irq);
 
     bh = qemu_bh_new(stm32_rtc_tick, s);
-    s->ptimer = ptimer_init(bh);
+    s->ptimer = ptimer_init(bh, PTIMER_POLICY_DEFAULT);
     
     /* Register handlers to handle updates to the RTC's peripheral clock. */
     clk_irq =

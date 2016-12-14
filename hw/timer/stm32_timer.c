@@ -19,6 +19,7 @@
  * with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "qemu/osdep.h"
 #include "hw/sysbus.h"
 #include "qemu/timer.h"
 #include "sysemu/sysemu.h"
@@ -444,7 +445,7 @@ static int stm32_timer_init(SysBusDevice *dev)
     stm32_rcc_set_periph_clk_irq(s->stm32_rcc, s->periph, clk_irq[0]);
 
     bh = qemu_bh_new(stm32_timer_tick, s);
-    s->timer = ptimer_init(bh);
+    s->timer = ptimer_init(bh, PTIMER_POLICY_DEFAULT);
 
     s->cr1   = 0;
     s->dier  = 0;
