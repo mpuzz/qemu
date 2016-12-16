@@ -262,7 +262,7 @@ static void stm32_uart_start_tx(Stm32Uart *s, uint32_t value)
  */
 static void stm32_uart_check_tx_pin(Stm32Uart *s)
 {
-    int tx_periph, tx_pin;
+/*    int tx_periph, tx_pin;
     int config;
 
     switch(s->periph) {
@@ -332,6 +332,7 @@ static void stm32_uart_check_tx_pin(Stm32Uart *s)
         hw_error("UART TX pin needs to be configured as "
                  "alternate function output");
     }
+*/
 }
 
 
@@ -575,9 +576,9 @@ static void stm32_uart_USART_CR1_write(Stm32Uart *s, uint32_t new_value,
         /* Check to make sure the correct mapping is selected when enabling the
          * USART.
          */
-        if(s->afio_board_map != stm32_afio_get_periph_map(s->stm32_afio, s->periph)) {
+        /*  if(s->afio_board_map != stm32_afio_get_periph_map(s->stm32_afio, s->periph)) {
             hw_error("Bad AFIO mapping for %s", stm32_periph_name(s->periph));
-        }
+            }*/
     }
 
     s->USART_CR1_TXEIE = extract32(new_value, USART_CR1_TXEIE_BIT, 1);
