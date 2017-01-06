@@ -23,7 +23,9 @@
 #include "exec/address-spaces.h"
 #include "exec/gdbstub.h"
 #include "sysemu/sysemu.h"
-
+#include "qapi/error.h"
+#include "avatar/irq.h"
+#include "avatar/avatar-io.h"
 /* DEFINITIONS */
 
 /* COMMON */
@@ -221,6 +223,20 @@ static void stm32_create_dac_dev(
     
 }
 
+static void init_mqs(void)
+{
+    const char *mq_irq = "/qemu_irq";
+    const char *mq_in = "/qemu_in";
+    const char *mq_out = "/qemu_out";
+    int fd;
+    qemu_avatar_mq_open_write(&IrqMQ, mq_irq, sizeof(IRQ_MSG));
+    qemu_avatar_mq_open_write(&ioResponseMQ, mq_out,
+                              sizeof(AvatarIOResponseMessage));
+    qemu_avatar_mq_open_read(&ioRequestMQ, mq_in,
+                             sizeof(AvatarIORequestMessage));
+    fd = qemu_avatar_mq_get_fd(&ioRequestMQ);
+    qemu_set_fd_handler(fd, avatar_serve_io, NULL, NULL);
+}
 
 void stm32_init(
             ram_addr_t flash_size,
@@ -231,15 +247,17 @@ void stm32_init(
 {
     MemoryRegion *address_space_mem = get_system_memory();
     MemoryRegion *flash_alias_mem = g_malloc(sizeof(MemoryRegion));
+    MemoryRegion *sram = g_new(MemoryRegion, 1);
+    MemoryRegion *flash = g_new(MemoryRegion, 1);
     DeviceState *nvic;
     int i;
 
     Object *stm32_container = container_get(qdev_get_machine(), "/stm32");
-
+    init_mqs();
     nvic = armv7m_init(
         // stm32_container,
               address_space_mem,
-              ram_size,
+              ram_size+flash_size,
               64,
               kernel_filename,
               "cortex-m3");
@@ -254,6 +272,13 @@ void stm32_init(
      * memory at 0x00000000 passes reads through the "real" flash memory at
      * 0x08000000, but it works the same either way. */
     /* TODO: Parameterize the base address of the aliased memory. */
+    memory_region_init_ram(flash, NULL, "armv7m.flash", flash_size*1024, &error_fatal);
+    vmstate_register_ram_global(flash);
+    memory_region_set_readonly(flash, true);
+    memory_region_add_subregion(address_space_mem, 0, flash);
+    memory_region_init_ram(sram, NULL, "armv7m.sram", ram_size*1024, &error_fatal);
+    vmstate_register_ram_global(sram);
+    memory_region_add_subregion(address_space_mem, 0x20000000, sram);
     memory_region_init_alias(
             flash_alias_mem,
             NULL,
