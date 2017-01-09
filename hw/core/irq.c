@@ -25,6 +25,9 @@
 #include "qemu-common.h"
 #include "hw/irq.h"
 #include "qom/object.h"
+#include "qemu/thread.h"
+#include "avatar/irq.h"
+#include "avatar/avatar-io.h"
 
 #define IRQ(obj) OBJECT_CHECK(struct IRQState, (obj), TYPE_IRQ)
 
@@ -41,6 +44,12 @@ void qemu_set_irq(qemu_irq irq, int level)
     if (!irq)
         return;
 
+    IRQ_MSG msg = {
+        .irq_num = irq->n,
+        .level = level
+    };
+    qemu_avatar_mq_send(&IrqMQ, &msg, sizeof(msg));
+    printf("Sending IRQ %d\n", irq->n);
     irq->handler(irq->opaque, irq->n, level);
 }
 
